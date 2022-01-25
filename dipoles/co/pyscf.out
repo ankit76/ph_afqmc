@@ -1,0 +1,285 @@
+#INFO: **** input file is /projects/anma2640/VMC/dqmc_tests/co/qz/100/scan/test/co.py ****
+import numpy
+from pyscf import gto, scf, mcscf, fci, ao2mo, lib, tools, cc
+from pauxy.utils.from_pyscf import generate_integrals
+import prepVMC
+
+r = 1.1282
+atomstring = f'''
+C 0. 0. 0.
+O {r} 0. 0.
+'''
+mol = gto.M(
+     atom=atomstring,
+     basis='augccpvqz',
+     verbose=4,
+     symmetry=0,
+     spin=0)
+mf = scf.RHF(mol)
+mf.kernel()
+norb = mol.nao
+nelec = mol.nelec
+print(f'norb: {norb}')
+print(f'nelec: {nelec}')
+
+
+# ccsd
+mycc = cc.CCSD(mf)
+mycc.frozen = 0
+mycc.verbose = 5
+mycc.kernel()
+#prepVMC.write_ccsd(mycc.t1, mycc.t2)
+
+et = mycc.ccsd_t()
+print('CCSD(T) energy', mycc.e_tot + et)
+
+rhf_dipole = mf.dip_moment(unit='au')
+print(f'mf dipole: {rhf_dipole}')
+
+nuc_dipmom = [0.0, 0.0, 0.0]
+for i in range(mol.natm):
+  for j in range(3):
+    nuc_dipmom[j] += mol.atom_charge(i)*mol.atom_coord(i)[j]
+
+dip_ints_ao = -mol.intor_symmetric('int1e_r', comp=3)
+dm1_cc = mycc.make_rdm1()
+dip_ints_mo = numpy.empty_like(dip_ints_ao)
+for i in range(dip_ints_ao.shape[0]):
+  dip_ints_mo[i] = mf.mo_coeff.T.dot(dip_ints_ao[i]).dot(mf.mo_coeff)
+edip_cc = [0., 0. ,0.]
+for i in range(3):
+  edip_cc[i] = numpy.trace(numpy.dot(dm1_cc, dip_ints_mo[i]))
+print(f'cc dipole: {numpy.array(nuc_dipmom) + numpy.array(edip_cc)}')
+
+
+print('relaxed cc dipoles:')
+norbFrozen = 0
+mf = scf.RHF(mol)
+dE = 1.e-5
+E = numpy.array([ -dE, 0., 0. ])
+h1e = mf.get_hcore()
+h1e += E[0] * dip_ints_ao[0]
+mf.get_hcore = lambda *args: h1e
+mf.verbose = 1
+mf.kernel()
+emf_m = mf.e_tot + E[0] * nuc_dipmom[0]
+
+mycc = cc.CCSD(mf)
+mycc.frozen = norbFrozen
+mycc.verbose = 1
+mycc.kernel()
+emp2_m = mycc.e_hf + mycc.emp2 + E[0] * nuc_dipmom[0]
+eccsd_m = mycc.e_tot + E[0] * nuc_dipmom[0]
+#prepVMC.write_ccsd(mycc.t1, mycc.t2)
+
+et = mycc.ccsd_t()
+print('CCSD(T) energy', mycc.e_tot + et)
+eccsdpt_m = mycc.e_tot + et + E[0] * nuc_dipmom[0]
+
+E = numpy.array([ dE, 0., 0. ])
+mf = scf.RHF(mol)
+h1e = mf.get_hcore()
+h1e += E[0] * dip_ints_ao[0]
+mf.get_hcore = lambda *args: h1e
+mf.verbose = 1
+mf.kernel()
+emf_p = mf.e_tot + E[0] * nuc_dipmom[0]
+
+mycc = cc.CCSD(mf)
+mycc.frozen = norbFrozen
+mycc.verbose = 1
+mycc.kernel()
+emp2_p = mycc.e_hf + mycc.emp2 + E[0] * nuc_dipmom[0]
+eccsd_p = mycc.e_tot + E[0] * nuc_dipmom[0]
+#prepVMC.write_ccsd(mycc.t1, mycc.t2)
+
+et = mycc.ccsd_t()
+print('CCSD(T) energy', mycc.e_tot + et)
+eccsdpt_p = mycc.e_tot + et + E[0] * nuc_dipmom[0]
+
+print(f'emf_m: {emf_m}, emf_p: {emf_p}, dip_mf: {(emf_p - emf_m) / 2 / dE}')
+print(f'emp2_m: {emp2_m}, emp2_p: {emp2_p}, dip_mp2: {(emp2_p - emp2_m) / 2 / dE}')
+print(f'eccsd_m: {eccsd_m}, eccsd_p: {eccsd_p}, dip_ccsd: {(eccsd_p - eccsd_m) / 2 / dE}')
+print(f'eccsdpt_m: {eccsdpt_m}, eccsd_p: {eccsdpt_p}, dip_ccsdpt: {(eccsdpt_p - eccsdpt_m) / 2 / dE}')
+#INFO: ******************** input file end ********************
+
+
+System: uname_result(system='Linux', node='bhpc-c7-u19-1.rc.int.colorado.edu', release='3.10.0-1160.15.2.el7.x86_64', version='#1 SMP Wed Feb 3 15:06:38 UTC 2021', machine='x86_64', processor='x86_64')  Threads 36
+Python 3.8.3 (default, May 19 2020, 18:47:26) 
+[GCC 7.3.0]
+numpy 1.19.1  scipy 1.5.2
+Date: Thu Jan 20 22:27:27 2022
+PySCF version 1.7.4
+PySCF path  /projects/anma2640/pyscf/pyscf
+GIT HEAD      ref: refs/heads/master
+GIT master branch  14142ec394cbdcffb8e214fba6b1d6cde9025e9a
+
+[CONFIG] conf_file None
+[INPUT] verbose = 4
+[INPUT] num. atoms = 2
+[INPUT] num. electrons = 14
+[INPUT] charge = 0
+[INPUT] spin (= nelec alpha-beta = 2S) = 0
+[INPUT] symmetry 0 subgroup None
+[INPUT] Mole.unit = angstrom
+[INPUT]  1 C      0.000000000000   0.000000000000   0.000000000000 AA    0.000000000000   0.000000000000   0.000000000000 Bohr
+[INPUT]  2 O      1.128200000000   0.000000000000   0.000000000000 AA    2.131989013734   0.000000000000   0.000000000000 Bohr
+
+nuclear repulsion = 22.5141873109023
+number of shells = 38
+number of NR pGTOs = 186
+number of NR cGTOs = 160
+basis = augccpvqz
+ecp = {}
+CPU time:         0.88
+
+
+******** <class 'pyscf.scf.hf.RHF'> ********
+method = RHF
+initial guess = minao
+damping factor = 0
+level_shift factor = 0
+DIIS = <class 'pyscf.scf.diis.CDIIS'>
+diis_start_cycle = 1
+diis_space = 8
+SCF conv_tol = 1e-09
+SCF conv_tol_grad = None
+SCF max_cycles = 50
+direct_scf = True
+direct_scf_tol = 1e-13
+chkfile to save SCF result = /rc_scratch/anma2640/tmpy0at8oar
+max_memory 4000 MB (current use 84 MB)
+Set gradient conv threshold to 3.16228e-05
+init E= -112.855782981819
+  HOMO = -0.363098518564758  LUMO = 0.0364551961969005
+cycle= 1 E= -112.731929944727  delta_E= 0.124  |g|= 0.513  |ddm|= 0.94
+  HOMO = -0.59659076239009  LUMO = 0.055326914499152
+cycle= 2 E= -112.755581739872  delta_E= -0.0237  |g|= 0.444  |ddm|= 0.376
+  HOMO = -0.561837263037311  LUMO = 0.0603400714872126
+cycle= 3 E= -112.788615298159  delta_E= -0.033  |g|= 0.0435  |ddm|= 0.176
+  HOMO = -0.552676067062538  LUMO = 0.0603053296690574
+cycle= 4 E= -112.789024916234  delta_E= -0.00041  |g|= 0.00938  |ddm|= 0.0315
+  HOMO = -0.554879796283006  LUMO = 0.060173917922991
+cycle= 5 E= -112.789052043806  delta_E= -2.71e-05  |g|= 0.00109  |ddm|= 0.0108
+  HOMO = -0.554927856010674  LUMO = 0.0601512002374166
+cycle= 6 E= -112.789052448987  delta_E= -4.05e-07  |g|= 0.00016  |ddm|= 0.00126
+  HOMO = -0.554925144613492  LUMO = 0.0601475564779326
+cycle= 7 E= -112.789052461884  delta_E= -1.29e-08  |g|= 3.75e-05  |ddm|= 0.000188
+  HOMO = -0.554915672879827  LUMO = 0.0601466450555835
+cycle= 8 E= -112.789052462633  delta_E= -7.49e-10  |g|= 7.82e-06  |ddm|= 4.59e-05
+  HOMO = -0.554917548091815  LUMO = 0.0601466467411914
+Extra cycle  E= -112.789052462654  delta_E= -2.14e-11  |g|= 2.89e-06  |ddm|= 5.69e-06
+converged SCF energy = -112.789052462654
+norb: 160
+nelec: (7, 7)
+
+******** <class 'pyscf.cc.ccsd.CCSD'> ********
+CC2 = 0
+CCSD nocc = 7, nmo = 160
+frozen orbitals 0
+max_cycle = 50
+direct = 0
+conv_tol = 1e-07
+conv_tol_normt = 1e-05
+diis_space = 6
+diis_start_cycle = 0
+diis_start_energy_diff = 1e+09
+max_memory 4000 MB (current use 831 MB)
+MO integrals int2e_sph are saved in <HDF5 file "tmptgpx2xhx" (mode r+)>/eri_mo
+num. MO ints = 1.3879196e+08, required disk 1110.3357 MB
+step1: tmpfile /rc_scratch/anma2640/tmp20kmg14k  1213.9142 MB
+step1: (ij,kl) = (11781,12880), mem cache 3168.5366 MB, iobuf 800 MB
+    CPU time for Initializing ao2mo.outcore.half_e1      0.78 sec, wall time      0.03 sec
+    CPU time for AO->MO transformation for int2e_sph 1 pass     55.50 sec, wall time      3.38 sec
+step2: kl-pair (ao 12880, mo 11781), mem 313.2416 MB, ioblock 286.51392 MB
+    CPU time for AO->MO transformation for int2e_sph 2 pass     35.89 sec, wall time      3.75 sec
+    CPU time for AO->MO transformation for int2e_sph      91.39 sec, wall time      7.13 sec
+step1: tmpfile /rc_scratch/anma2640/tmp2qhb_0wa  115.4048 MB
+step1: (ij,kl) = (1120,12880), mem cache 3101.4769 MB, iobuf 800 MB
+    CPU time for Initializing ao2mo.outcore.half_e1      0.13 sec, wall time      0.02 sec
+    CPU time for CCSD integral transformation    150.39 sec, wall time      9.71 sec
+Init t2, MP2 energy = -113.229772818004  E_corr(MP2) -0.440720355349517
+    CPU time for init mp2      0.03 sec, wall time      0.04 sec
+Init E_corr(CCSD) = -0.440720355352368
+cycle = 1  E_corr(CCSD) = -0.42554203715558  dE = 0.0151783182  norm(t1,t2) = 0.0610145
+    CPU time for CCSD iter     95.76 sec, wall time      2.94 sec
+cycle = 2  E_corr(CCSD) = -0.441176210587978  dE = -0.0156341734  norm(t1,t2) = 0.0222752
+    CPU time for CCSD iter     99.16 sec, wall time      2.83 sec
+cycle = 3  E_corr(CCSD) = -0.439625108481476  dE = 0.00155110211  norm(t1,t2) = 0.0127233
+    CPU time for CCSD iter     99.03 sec, wall time      2.89 sec
+cycle = 4  E_corr(CCSD) = -0.440847418898787  dE = -0.00122231042  norm(t1,t2) = 0.00410132
+    CPU time for CCSD iter    102.65 sec, wall time      3.00 sec
+cycle = 5  E_corr(CCSD) = -0.441127462853832  dE = -0.000280043955  norm(t1,t2) = 0.000761837
+    CPU time for CCSD iter    110.86 sec, wall time      3.17 sec
+cycle = 6  E_corr(CCSD) = -0.441044579023296  dE = 8.28838305e-05  norm(t1,t2) = 0.000249115
+    CPU time for CCSD iter     96.10 sec, wall time      2.74 sec
+cycle = 7  E_corr(CCSD) = -0.441044309668272  dE = 2.69355024e-07  norm(t1,t2) = 5.22714e-05
+    CPU time for CCSD iter     93.27 sec, wall time      2.67 sec
+cycle = 8  E_corr(CCSD) = -0.44104755182202  dE = -3.24215375e-06  norm(t1,t2) = 1.44722e-05
+    CPU time for CCSD iter     99.28 sec, wall time      2.84 sec
+cycle = 9  E_corr(CCSD) = -0.441046770093763  dE = 7.81728256e-07  norm(t1,t2) = 4.48641e-06
+    CPU time for CCSD iter     95.80 sec, wall time      2.78 sec
+cycle = 10  E_corr(CCSD) = -0.441046584617551  dE = 1.85476213e-07  norm(t1,t2) = 1.09811e-06
+    CPU time for CCSD iter     95.16 sec, wall time      2.72 sec
+cycle = 11  E_corr(CCSD) = -0.441046562030329  dE = 2.25872216e-08  norm(t1,t2) = 3.63027e-07
+    CPU time for CCSD iter     97.64 sec, wall time      2.79 sec
+    CPU time for CCSD   1084.73 sec, wall time     31.35 sec
+CCSD converged
+E(CCSD) = -113.2300990246848  E_corr = -0.4410465620303292
+MO integrals int2e_sph are saved in <HDF5 file "tmpjl7m7bsy" (mode r+)>/eri_mo
+num. MO ints = 1.3879196e+08, required disk 1110.3357 MB
+step1: tmpfile /rc_scratch/anma2640/tmpclwfej77  1213.9142 MB
+step1: (ij,kl) = (11781,12880), mem cache 2877.2946 MB, iobuf 800 MB
+    CPU time for Initializing ao2mo.outcore.half_e1      0.76 sec, wall time      0.02 sec
+    CPU time for AO->MO transformation for int2e_sph 1 pass     56.05 sec, wall time      3.30 sec
+step2: kl-pair (ao 12880, mo 11781), mem 280.2688 MB, ioblock 256.35456 MB
+    CPU time for AO->MO transformation for int2e_sph 2 pass     42.96 sec, wall time      3.77 sec
+    CPU time for AO->MO transformation for int2e_sph      99.00 sec, wall time      7.07 sec
+step1: tmpfile /rc_scratch/anma2640/tmpgcs32jhi  115.4048 MB
+step1: (ij,kl) = (1120,12880), mem cache 2861.5823 MB, iobuf 800 MB
+    CPU time for Initializing ao2mo.outcore.half_e1      0.19 sec, wall time      0.01 sec
+    CPU time for CCSD integral transformation    153.39 sec, wall time      9.45 sec
+max_memory 2859 MB (1140 MB in use)
+    CPU time for CCSD(T)     35.93 sec, wall time      1.17 sec
+CCSD(T) correction = -0.0193843504958218
+CCSD(T) energy -113.24948337518059
+Dipole moment(X, Y, Z, A.U.): -0.10433, -0.00000, -0.00000
+mf dipole: [-1.04330847e-01 -2.57326771e-17 -1.14472558e-15]
+MO integrals int2e_sph are saved in <HDF5 file "tmpsi3bx0rs" (mode r+)>/eri_mo
+num. MO ints = 1.3879196e+08, required disk 1110.3357 MB
+step1: tmpfile /rc_scratch/anma2640/tmp02cxxa8n  1213.9142 MB
+step1: (ij,kl) = (11781,12880), mem cache 2824.6364 MB, iobuf 800 MB
+    CPU time for Initializing ao2mo.outcore.half_e1      0.42 sec, wall time      0.01 sec
+    CPU time for AO->MO transformation for int2e_sph 1 pass     63.43 sec, wall time      3.26 sec
+step2: kl-pair (ao 12880, mo 11781), mem 280.2688 MB, ioblock 256.35456 MB
+    CPU time for AO->MO transformation for int2e_sph 2 pass     42.51 sec, wall time      3.80 sec
+    CPU time for AO->MO transformation for int2e_sph     105.94 sec, wall time      7.05 sec
+step1: tmpfile /rc_scratch/anma2640/tmp6vwysyas  115.4048 MB
+step1: (ij,kl) = (1120,12880), mem cache 2821.7201 MB, iobuf 800 MB
+    CPU time for Initializing ao2mo.outcore.half_e1      0.08 sec, wall time      0.01 sec
+    CPU time for CCSD integral transformation    156.49 sec, wall time      9.32 sec
+    CPU time for CCSD lambda initialization     66.80 sec, wall time      4.77 sec
+cycle = 1  norm(lambda1,lambda2) = 0.0272813
+    CPU time for CCSD iter     94.12 sec, wall time      2.63 sec
+cycle = 2  norm(lambda1,lambda2) = 0.00622892
+    CPU time for CCSD iter     92.64 sec, wall time      2.58 sec
+cycle = 3  norm(lambda1,lambda2) = 0.00446637
+    CPU time for CCSD iter     92.36 sec, wall time      2.57 sec
+cycle = 4  norm(lambda1,lambda2) = 0.0016091
+    CPU time for CCSD iter     94.54 sec, wall time      2.63 sec
+cycle = 5  norm(lambda1,lambda2) = 0.000238564
+    CPU time for CCSD iter     88.64 sec, wall time      2.47 sec
+cycle = 6  norm(lambda1,lambda2) = 8.62846e-05
+    CPU time for CCSD iter     89.06 sec, wall time      2.48 sec
+cycle = 7  norm(lambda1,lambda2) = 1.65951e-05
+    CPU time for CCSD iter     89.64 sec, wall time      2.50 sec
+cycle = 8  norm(lambda1,lambda2) = 4.33606e-06
+    CPU time for CCSD iter     92.75 sec, wall time      2.58 sec
+cc dipole: [ 5.13751164e-02  5.24548292e-17 -1.31598818e-16]
+relaxed cc dipoles:
+CCSD(T) energy -113.24931329599818
+CCSD(T) energy -113.2496534554721
+emf_m: -112.78905142008449, emf_p: -112.78905350667227, dip_mf: -0.104329389216673
+emp2_m: -113.2297739035739, emp2_p: -113.22977173399167, dip_mp2: 0.10847911156020017
+eccsd_m: -113.23009926950473, eccsd_p: -113.23009878104205, dip_ccsd: 0.024423134448170455
+eccsdpt_m: -113.24948385511928, eccsd_p: -113.249482896351, dip_ccsdpt: 0.047938414127202116

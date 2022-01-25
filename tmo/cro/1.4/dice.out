@@ -1,0 +1,125 @@
+
+     ____  _
+    |  _ \(_) ___ ___
+    | | | | |/ __/ _ \
+    | |_| | | (_|  __/
+    |____/|_|\___\___|   v1.0
+
+
+**************************************************************
+Dice  Copyright (C) 2017  Sandeep Sharma
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+See the GNU General Public License for more details.
+
+Author:       Sandeep Sharma
+Contributors: James E Smith, Adam A Holmes, Bastien Mussard
+For detailed documentation on Dice please visit
+https://sanshar.github.io/Dice/
+and our group page for up to date information on other projects
+http://www.colorado.edu/lab/sharmagroup/
+**************************************************************
+
+User:             anma2640
+Date:             Mon Jan 10 21:19:25 2022
+PID:              23238
+
+Path:             /projects/anma2640/newDice/Dice/Dice
+Commit:           b241343d035b33ab6c0de97d713be6c4814aa662
+Branch:           master
+Compilation Date: Jan  9 2022 16:08:36
+
+
+**************************************************************
+INPUT FILE
+**************************************************************
+#system
+nocc 20
+0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 18 20 22 
+orbitals ./FCIDUMP_can
+nroots 1
+
+#variational
+schedule
+0	1e-05
+end
+davidsonTol 5e-05
+dE 1e-05
+maxiter 6
+writebestdeterminants 50000
+
+#pt
+nPTiter 10
+epsilon2 1e-07
+#epsilon2Large 2e-5
+targetError 1e-5
+sampleN 200
+
+#misc
+noio
+#prefix /scratch/summit/anma2640/fep
+#DoRDM
+#DoSpinRDM
+
+
+
+**************************************************************
+SELECTING REFERENCE DETERMINANT(S)
+**************************************************************
+2 2 2 2 2   2 2 2 a a   a a 0 0 0   0 0 0  Given Ref. Energy:       -101.7800918798
+
+
+**************************************************************
+VARIATIONAL STEP  
+**************************************************************
+Iter Root       Eps1   #Var. Det.               Energy   #Davidson     Time(s)
+   0    0    1.00e-05        2052      -102.0179029659         13        0.24
+   1    0    1.00e-05      342573      -102.0491000737         16        4.54
+   2    0    1.00e-05     1110554      -102.0514540621         14       15.02
+   3    0    1.00e-05     1237906      -102.0514943917          7       18.70
+   4    0    1.00e-05     1242612      -102.0514947838          4       20.61
+Performing final tight davidson with tol: 5e-05
+Exiting variational iterations
+
+Variational calculation result
+Root             Energy     Time(s)
+   0     -102.0514947838       20.89
+
+Printing most important determinants
+ Det     weight  Determinant string
+State :   0
+   0       0.9346725817  2 2 2 2 2   2 2 2 a a   a a 0 0 0   0 0 0 
+   1      -0.0928835580  2 2 2 2 2   2 2 0 a a   a a 0 0 0   0 2 0 
+   2      -0.0696503501  2 2 2 2 2   2 2 b a a   a a 0 0 0   0 a 0 
+   3      -0.0692180172  2 2 2 2 2   2 2 2 a a   a 0 0 0 a   0 0 0 
+   4      -0.0542624772  2 2 2 2 2   0 2 2 a a   a a 0 0 2   0 0 0 
+   5      -0.0537701334  2 2 2 2 2   2 0 2 a a   a a 0 2 0   0 0 0 
+
+
+**************************************************************
+PERTURBATION THEORY STEP  
+**************************************************************
+Performing (semi)stochastic PT for state:   0
+Deterministic PT calculation converged
+PTEnergy:    -102.0514947838
+Time(s):       82.77
+
+2/ Stochastic calculation with epsilon2=1e-07
+  Iter          EPTcurrent  State             EPTavg      Error     Time(s)
+     1     -102.0515440064      0    -102.0515440064         --       83.33
+     2     -102.0515437835      0    -102.0515438950         --       83.63
+     3     -102.0515423534      0    -102.0515433811         --       83.95
+     4     -102.0515439725      0    -102.0515435290         --       84.27
+     5     -102.0515425119      0    -102.0515433255   3.67e-07       84.58
+Semistochastic PT calculation converged
+PTEnergy:    -102.0515433255 +/- 3.67e-07
+Time(s):       84.58
+
+
+**************************************************************
+Returning without error
+**************************************************************
+
+

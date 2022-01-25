@@ -1,0 +1,5 @@
+norbs: 160,  nobs: 3
+variational obs_dice: [-0.0229784  0.         0.       ]
+mixed obs_afqmc: [ 0.0659057 -0.0021676 -0.0037936]
+extrapolated obs: [ 0.154790  -0.0043351 -0.0075872]
+errors: [0.0026214 0.0030099 0.0023748]

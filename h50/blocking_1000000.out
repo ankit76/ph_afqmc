@@ -1,0 +1,10 @@
+reading samples from samples_1000000.dat, ignoring first 50
+mean: -26.71712993563751
+blocked statistics:
+block size    # of blocks        mean                error
+     1            101       -2.67171299e+01       3.697758e-04
+     2             50       -2.67170382e+01       4.880165e-04
+     5             20       -2.67170382e+01       7.317623e-04
+    10             10       -2.67170382e+01       9.976304e-04
+    20              5       -2.67170382e+01       1.113684e-03
+    50              2       -2.67170382e+01       9.248108e-04

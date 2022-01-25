@@ -1,0 +1,366 @@
+#INFO: **** input file is /projects/anma2640/VMC/dqmc_tests/nh3/6-31g/nh3.py ****
+import numpy
+from pyscf import gto, scf, mcscf, fci, ao2mo, lib, tools, cc
+from pauxy.utils.from_pyscf import generate_integrals
+import prepVMC
+
+r = 1.07
+theta = 100.08 * numpy.pi / 180.
+rz = r * numpy.sqrt(numpy.cos(theta/2)**2 - numpy.sin(theta/2)**2/3)
+dc = 2 * r * numpy.sin(theta/2) / numpy.sqrt(3)
+atomstring = f'''
+N 0. 0. 0.
+H 0. {dc} {rz}
+H {r * numpy.sin(theta/2)} {-dc/2} {rz}
+H {-r * numpy.sin(theta/2)} {-dc/2} {rz}
+'''
+mol = gto.M(
+     atom=atomstring,
+     basis='6-31g',
+     verbose=4,
+     symmetry=0,
+     spin=0)
+mf = scf.RHF(mol)
+mf.kernel()
+norb = mol.nao
+nelec = mol.nelec
+print(f'norb: {norb}')
+print(f'nelec: {nelec}')
+
+moAct = mf.mo_coeff
+
+# integrals in the canonical orbital basis
+h1 = moAct.T.dot(mf.get_hcore()).dot(moAct)
+eri = ao2mo.kernel(mol, moAct)
+tools.fcidump.from_integrals('FCIDUMP_can', h1, eri, norb, mol.nelectron, mf.energy_nuc())
+
+# set up dqmc calculation
+rhfCoeffs = numpy.eye(norb)
+prepVMC.writeMat(rhfCoeffs, "rhf.txt")
+
+# cholesky integrals using this funtion in pauxy
+h1e, chol, nelec, enuc = generate_integrals(mol, mf.get_hcore(), mf.mo_coeff, chol_cut=1e-5, verbose=True)
+
+nbasis = h1e.shape[-1]
+print(f'nelec: {nelec}')
+print(f'nbasis: {nbasis}')
+print(f'chol.shape: {chol.shape}')
+chol = chol.reshape((-1, nbasis, nbasis))
+v0 = 0.5 * numpy.einsum('nik,njk->ij', chol, chol, optimize='optimal')
+h1e_mod = h1e - v0
+chol = chol.reshape((chol.shape[0], -1))
+prepVMC.write_dqmc(h1e, h1e_mod, chol, sum(mol.nelec), nbasis, enuc, filename='FCIDUMP_chol')
+
+# ccsd
+mycc = cc.CCSD(mf)
+mycc.frozen = 0
+mycc.verbose = 5
+mycc.kernel()
+#prepVMC.write_ccsd(mycc.t1, mycc.t2)
+
+et = mycc.ccsd_t()
+print('CCSD(T) energy', mycc.e_tot + et)
+
+nuc_dipmom = [0.0, 0.0, 0.0]
+for i in range(mol.natm):
+  for j in range(3):
+    nuc_dipmom[j] += mol.atom_charge(i)*mol.atom_coord(i)[j]
+
+dip_ints_ao = -mol.intor_symmetric('int1e_r', comp=3)
+dip_ints_mo = numpy.empty_like(dip_ints_ao)
+for i in range(dip_ints_ao.shape[0]):
+  dip_ints_mo[i] = mf.mo_coeff.T.dot(dip_ints_ao[i]).dot(mf.mo_coeff)
+
+import h5py
+with h5py.File('dipoleInts.h5', 'w') as fh5:
+  fh5['header'] = numpy.array([mol.nao, 3])
+  fh5['constants'] = numpy.array(nuc_dipmom)
+  for i in range(3):
+    fh5[f'ints_{i}'] = dip_ints_mo[i]
+#eri_zero = eri * 0.
+#perm, dzH = fci.direct_spin1.pspace(dip_ints_mo[2], eri_zero, mol.nao, mol.nelec, np=hDim)
+#dzH = dzH[numpy.ix_(perm, perm)]
+#print(f'hf dz: {nuc_dipmom[2] - dzH[0,0]}')
+#print(f'fci dz: {nuc_dipmom[2] - state[:,0].T.dot(dzH).dot(state[:,0])}')
+#exit(0)
+#dm1_fci = cisolver.make_rdm1(ci, mol.nao, mol.nelec)
+rhf_dipole = mf.dip_moment(unit='au')
+print(f'mf dipole: {rhf_dipole}')
+dm1_cc = mycc.make_rdm1()
+dip_ints_mo = numpy.empty_like(dip_ints_ao)
+for i in range(dip_ints_ao.shape[0]):
+  dip_ints_mo[i] = mf.mo_coeff.T.dot(dip_ints_ao[i]).dot(mf.mo_coeff)
+edip_cc = [0., 0. ,0.]
+for i in range(3):
+  edip_cc[i] = numpy.trace(numpy.dot(dm1_cc, dip_ints_mo[i]))
+print(f'cc dipole: {numpy.array(nuc_dipmom) + numpy.array(edip_cc)}')
+
+
+print('relaxed cc dipoles:')
+mf = scf.RHF(mol)
+dE = 1.e-5
+E = numpy.array([ 0., 0., -dE ])
+h1e = mf.get_hcore()
+h1e += E[2] * dip_ints_ao[2]
+mf.get_hcore = lambda *args: h1e
+mf.verbose = 1
+mf.kernel()
+emf_m = mf.e_tot + E[2] * nuc_dipmom[2]
+
+mycc = cc.CCSD(mf)
+mycc.frozen = 0
+mycc.verbose = 1
+mycc.kernel()
+eccsd_m = mycc.e_tot + E[2] * nuc_dipmom[2]
+#prepVMC.write_ccsd(mycc.t1, mycc.t2)
+
+et = mycc.ccsd_t()
+print('CCSD(T) energy', mycc.e_tot + et)
+eccsdpt_m = mycc.e_tot + et + E[2] * nuc_dipmom[2]
+
+E = numpy.array([ 0., 0., dE ])
+mf = scf.RHF(mol)
+h1e = mf.get_hcore()
+h1e += E[2] * dip_ints_ao[2]
+mf.get_hcore = lambda *args: h1e
+mf.verbose = 1
+mf.kernel()
+emf_p = mf.e_tot + E[2] * nuc_dipmom[2]
+
+mycc = cc.CCSD(mf)
+mycc.frozen = 0
+mycc.verbose = 1
+mycc.kernel()
+eccsd_p = mycc.e_tot + E[2] * nuc_dipmom[2]
+#prepVMC.write_ccsd(mycc.t1, mycc.t2)
+
+et = mycc.ccsd_t()
+print('CCSD(T) energy', mycc.e_tot + et)
+eccsdpt_p = mycc.e_tot + et + E[2] * nuc_dipmom[2]
+
+print(f'emf_m: {emf_m}, emf_p: {emf_p}, dip_mf: {(emf_p - emf_m) / 2 / dE}')
+print(f'eccsd_m: {eccsd_m}, eccsd_p: {eccsd_p}, dip_ccsd: {(eccsd_p - eccsd_m) / 2 / dE}')
+print(f'eccsdpt_m: {eccsdpt_m}, eccsd_p: {eccsdpt_p}, dip_ccsdpt: {(eccsdpt_p - eccsdpt_m) / 2 / dE}')
+#INFO: ******************** input file end ********************
+
+
+System: uname_result(system='Linux', node='bhpc-c7-u7-2.rc.int.colorado.edu', release='3.10.0-1160.15.2.el7.x86_64', version='#1 SMP Wed Feb 3 15:06:38 UTC 2021', machine='x86_64', processor='x86_64')  Threads 36
+Python 3.8.3 (default, May 19 2020, 18:47:26) 
+[GCC 7.3.0]
+numpy 1.19.1  scipy 1.5.2
+Date: Wed Jan 12 20:40:20 2022
+PySCF version 1.7.4
+PySCF path  /projects/anma2640/pyscf/pyscf
+GIT HEAD      ref: refs/heads/master
+GIT master branch  14142ec394cbdcffb8e214fba6b1d6cde9025e9a
+
+[CONFIG] conf_file None
+[INPUT] verbose = 4
+[INPUT] num. atoms = 4
+[INPUT] num. electrons = 10
+[INPUT] charge = 0
+[INPUT] spin (= nelec alpha-beta = 2S) = 0
+[INPUT] symmetry 0 subgroup None
+[INPUT] Mole.unit = angstrom
+[INPUT]  1 N      0.000000000000   0.000000000000   0.000000000000 AA    0.000000000000   0.000000000000   0.000000000000 Bohr
+[INPUT]  2 H      0.000000000000   0.947024779761   0.498040225805 AA    0.000000000000   1.789617466924   0.941159625787 Bohr
+[INPUT]  3 H      0.820147517286  -0.473512389880   0.498040225805 AA    1.549854189413  -0.894808733462   0.941159625787 Bohr
+[INPUT]  4 H     -0.820147517286  -0.473512389880   0.498040225805 AA   -1.549854189413  -0.894808733462   0.941159625787 Bohr
+
+nuclear repulsion = 11.3535539428171
+number of shells = 11
+number of NR pGTOs = 34
+number of NR cGTOs = 15
+basis = 6-31g
+ecp = {}
+CPU time:         0.59
+
+
+******** <class 'pyscf.scf.hf.RHF'> ********
+method = RHF
+initial guess = minao
+damping factor = 0
+level_shift factor = 0
+DIIS = <class 'pyscf.scf.diis.CDIIS'>
+diis_start_cycle = 1
+diis_space = 8
+SCF conv_tol = 1e-09
+SCF conv_tol_grad = None
+SCF max_cycles = 50
+direct_scf = True
+direct_scf_tol = 1e-13
+chkfile to save SCF result = /rc_scratch/anma2640/tmpy6w56jog
+max_memory 4000 MB (current use 82 MB)
+Set gradient conv threshold to 3.16228e-05
+init E= -55.8812623441313
+  HOMO = -0.336453414380397  LUMO = 0.138216103199001
+cycle= 1 E= -56.1323111695  delta_E= -0.251  |g|= 0.195  |ddm|= 1.41
+  HOMO = -0.406561224084322  LUMO = 0.1957363229349
+cycle= 2 E= -56.1438688727156  delta_E= -0.0116  |g|= 0.0668  |ddm|= 0.222
+  HOMO = -0.438184937517574  LUMO = 0.193412461280802
+cycle= 3 E= -56.14497963374  delta_E= -0.00111  |g|= 0.0225  |ddm|= 0.0692
+  HOMO = -0.432071813098074  LUMO = 0.197587907284118
+cycle= 4 E= -56.1451640825357  delta_E= -0.000184  |g|= 0.00441  |ddm|= 0.0264
+  HOMO = -0.433295806864526  LUMO = 0.19716574053339
+cycle= 5 E= -56.1451863559373  delta_E= -2.23e-05  |g|= 0.000887  |ddm|= 0.0174
+  HOMO = -0.433436654179622  LUMO = 0.197102855943611
+cycle= 6 E= -56.1451872053443  delta_E= -8.49e-07  |g|= 9.14e-05  |ddm|= 0.00433
+  HOMO = -0.433407699301056  LUMO = 0.19711659817765
+cycle= 7 E= -56.1451872095273  delta_E= -4.18e-09  |g|= 1.03e-05  |ddm|= 0.000282
+  HOMO = -0.433405002671878  LUMO = 0.197116716382346
+cycle= 8 E= -56.145187209589  delta_E= -6.17e-11  |g|= 1.4e-06  |ddm|= 2.49e-05
+  HOMO = -0.433405527575087  LUMO = 0.197116511601853
+Extra cycle  E= -56.1451872095895  delta_E= -4.83e-13  |g|= 6.24e-07  |ddm|= 1.87e-06
+converged SCF energy = -56.1451872095895
+norb: 15
+nelec: (5, 5)
+ # Transforming hcore and eri to ortho AO basis.
+ # Performing modified Cholesky decomposition on ERI tensor.
+# Generating Cholesky decomposition of ERIs.
+# max number of cholesky vectors = 150
+# iteration     0: delta_max = 4.158222
+# iteration     1: delta_max = 1.01787679e+00: time = 7.87912868e-04
+# iteration     2: delta_max = 9.49480083e-01: time = 8.08728859e-04
+# iteration     3: delta_max = 9.09243417e-01: time = 9.74651892e-04
+# iteration     4: delta_max = 4.00227043e-01: time = 8.53115227e-04
+# iteration     5: delta_max = 1.91208275e-01: time = 9.47794877e-04
+# iteration     6: delta_max = 1.77332806e-01: time = 8.09756108e-04
+# iteration     7: delta_max = 1.76122712e-01: time = 9.48105939e-04
+# iteration     8: delta_max = 1.75932991e-01: time = 7.94947147e-04
+# iteration     9: delta_max = 1.46002541e-01: time = 9.24665015e-04
+# iteration    10: delta_max = 9.96793872e-02: time = 7.93616287e-04
+# iteration    11: delta_max = 6.41140744e-02: time = 8.66164919e-04
+# iteration    12: delta_max = 6.28067955e-02: time = 7.67388847e-04
+# iteration    13: delta_max = 6.16826725e-02: time = 8.95863865e-04
+# iteration    14: delta_max = 5.12569735e-02: time = 8.30051024e-04
+# iteration    15: delta_max = 5.10183611e-02: time = 9.50532034e-04
+# iteration    16: delta_max = 5.10183611e-02: time = 8.43242742e-04
+# iteration    17: delta_max = 4.15095147e-02: time = 8.81338958e-04
+# iteration    18: delta_max = 4.02403963e-02: time = 7.56134279e-04
+# iteration    19: delta_max = 3.01860352e-02: time = 9.58226155e-04
+# iteration    20: delta_max = 3.01452477e-02: time = 8.56100116e-04
+# iteration    21: delta_max = 3.00440740e-02: time = 9.74437222e-04
+# iteration    22: delta_max = 1.70451510e-02: time = 1.02034537e-03
+# iteration    23: delta_max = 1.59987457e-02: time = 9.01598018e-04
+# iteration    24: delta_max = 1.59987457e-02: time = 7.72759318e-04
+# iteration    25: delta_max = 1.56463665e-02: time = 8.68573785e-04
+# iteration    26: delta_max = 8.35612721e-03: time = 7.51156826e-04
+# iteration    27: delta_max = 8.35612721e-03: time = 8.48326832e-04
+# iteration    28: delta_max = 6.40758918e-03: time = 8.01679678e-04
+# iteration    29: delta_max = 2.33949082e-03: time = 9.15505923e-04
+# iteration    30: delta_max = 2.19707587e-03: time = 7.78985210e-04
+# iteration    31: delta_max = 2.11877313e-03: time = 8.68252013e-04
+# iteration    32: delta_max = 1.96872978e-03: time = 7.74620101e-04
+# iteration    33: delta_max = 1.95103086e-03: time = 8.72743316e-04
+# iteration    34: delta_max = 1.77706870e-03: time = 7.61099160e-04
+# iteration    35: delta_max = 1.75515996e-03: time = 9.11702868e-04
+# iteration    36: delta_max = 1.60342649e-03: time = 7.79530965e-04
+# iteration    37: delta_max = 1.58928267e-03: time = 8.89119692e-04
+# iteration    38: delta_max = 1.52611080e-03: time = 8.02326016e-04
+# iteration    39: delta_max = 1.51646353e-03: time = 9.14887059e-04
+# iteration    40: delta_max = 1.50449143e-03: time = 7.89100770e-04
+# iteration    41: delta_max = 1.45585349e-03: time = 8.62861983e-04
+# iteration    42: delta_max = 1.31054222e-03: time = 7.80364964e-04
+# iteration    43: delta_max = 1.19186172e-03: time = 8.90242867e-04
+# iteration    44: delta_max = 7.32493765e-04: time = 7.77750742e-04
+# iteration    45: delta_max = 7.04907118e-04: time = 9.01854131e-04
+# iteration    46: delta_max = 6.96404193e-04: time = 7.90277030e-04
+# iteration    47: delta_max = 6.77440264e-04: time = 8.86138063e-04
+# iteration    48: delta_max = 4.35145480e-04: time = 7.68277794e-04
+# iteration    49: delta_max = 3.71677043e-04: time = 8.90606083e-04
+# iteration    50: delta_max = 2.99101679e-04: time = 7.62738287e-04
+# iteration    51: delta_max = 2.80894729e-04: time = 9.14843753e-04
+# iteration    52: delta_max = 2.76529847e-04: time = 7.67855905e-04
+# iteration    53: delta_max = 2.64288337e-04: time = 8.77957325e-04
+# iteration    54: delta_max = 2.54601006e-04: time = 7.51935877e-04
+# iteration    55: delta_max = 2.37546477e-04: time = 8.89626332e-04
+# iteration    56: delta_max = 2.33655779e-04: time = 7.76073895e-04
+# iteration    57: delta_max = 2.33134319e-04: time = 9.18996986e-04
+# iteration    58: delta_max = 2.17130605e-04: time = 7.94711988e-04
+# iteration    59: delta_max = 1.87481293e-04: time = 9.14619770e-04
+# iteration    60: delta_max = 1.74359495e-04: time = 8.07865057e-04
+# iteration    61: delta_max = 1.70006581e-04: time = 8.90941359e-04
+# iteration    62: delta_max = 1.62991518e-04: time = 7.80108385e-04
+# iteration    63: delta_max = 1.38924314e-04: time = 9.45430249e-04
+# iteration    64: delta_max = 1.28461815e-04: time = 7.92099163e-04
+# iteration    65: delta_max = 1.01296246e-04: time = 1.17972773e-03
+# iteration    66: delta_max = 1.00534134e-04: time = 8.06180760e-04
+# iteration    67: delta_max = 8.34863200e-05: time = 9.05801076e-04
+# iteration    68: delta_max = 4.29368146e-05: time = 7.62872864e-04
+# iteration    69: delta_max = 3.34480251e-05: time = 8.89974646e-04
+# iteration    70: delta_max = 1.99399019e-05: time = 7.62715936e-04
+# iteration    71: delta_max = 1.98647422e-05: time = 8.71849246e-04
+# iteration    72: delta_max = 1.97982775e-05: time = 7.77737238e-04
+# iteration    73: delta_max = 1.10136569e-05: time = 8.93407036e-04
+# iteration    74: delta_max = 9.38565182e-06: time = 8.98522325e-04
+ # Orthogonalising Cholesky vectors.
+ # Time to orthogonalise: 0.000478
+nelec: (5, 5)
+nbasis: 15
+chol.shape: (74, 225)
+
+******** <class 'pyscf.cc.ccsd.CCSD'> ********
+CC2 = 0
+CCSD nocc = 5, nmo = 15
+frozen orbitals 0
+max_cycle = 50
+direct = 0
+conv_tol = 1e-07
+conv_tol_normt = 1e-05
+diis_space = 6
+diis_start_cycle = 0
+diis_start_energy_diff = 1e+09
+max_memory 4000 MB (current use 178 MB)
+    CPU time for CCSD integral transformation      0.31 sec, wall time      0.01 sec
+Init t2, MP2 energy = -56.2684807701943  E_corr(MP2) -0.123293560604818
+    CPU time for init mp2      0.01 sec, wall time      0.00 sec
+Init E_corr(CCSD) = -0.123293560604932
+cycle = 1  E_corr(CCSD) = -0.130853417618517  dE = -0.00755985701  norm(t1,t2) = 0.029066
+    CPU time for CCSD iter      9.47 sec, wall time      0.26 sec
+cycle = 2  E_corr(CCSD) = -0.134717680122509  dE = -0.0038642625  norm(t1,t2) = 0.0115394
+    CPU time for CCSD iter      4.88 sec, wall time      0.14 sec
+cycle = 3  E_corr(CCSD) = -0.136912634533893  dE = -0.00219495441  norm(t1,t2) = 0.00492766
+    CPU time for CCSD iter      4.46 sec, wall time      0.12 sec
+cycle = 4  E_corr(CCSD) = -0.137018607578399  dE = -0.000105973045  norm(t1,t2) = 0.000804342
+    CPU time for CCSD iter      4.45 sec, wall time      0.12 sec
+cycle = 5  E_corr(CCSD) = -0.136988379033786  dE = 3.02285446e-05  norm(t1,t2) = 0.000278276
+    CPU time for CCSD iter      5.87 sec, wall time      0.16 sec
+cycle = 6  E_corr(CCSD) = -0.136991710039161  dE = -3.33100537e-06  norm(t1,t2) = 9.86366e-05
+    CPU time for CCSD iter      4.41 sec, wall time      0.12 sec
+cycle = 7  E_corr(CCSD) = -0.136990822122875  dE = 8.87916286e-07  norm(t1,t2) = 2.62818e-05
+    CPU time for CCSD iter      5.74 sec, wall time      0.16 sec
+cycle = 8  E_corr(CCSD) = -0.136990015114374  dE = 8.07008501e-07  norm(t1,t2) = 5.0678e-06
+    CPU time for CCSD iter      6.30 sec, wall time      0.18 sec
+cycle = 9  E_corr(CCSD) = -0.136990009415592  dE = 5.69878222e-09  norm(t1,t2) = 1.39346e-06
+    CPU time for CCSD iter      5.34 sec, wall time      0.15 sec
+    CPU time for CCSD     50.92 sec, wall time      1.42 sec
+CCSD converged
+E(CCSD) = -56.28217721900511  E_corr = -0.1369900094155917
+    CPU time for CCSD integral transformation      0.48 sec, wall time      0.01 sec
+max_memory 3819 MB (180 MB in use)
+    CPU time for CCSD(T)      2.24 sec, wall time      0.06 sec
+CCSD(T) correction = -0.00181517341634049
+CCSD(T) energy -56.28399239242145
+Dipole moment(X, Y, Z, A.U.):  0.00000,  0.00000,  1.03886
+mf dipole: [4.88498131e-15 2.85882429e-15 1.03886122e+00]
+    CPU time for CCSD integral transformation      0.45 sec, wall time      0.01 sec
+    CPU time for CCSD lambda initialization      4.21 sec, wall time      0.12 sec
+cycle = 1  norm(lambda1,lambda2) = 0.0045322
+    CPU time for CCSD iter      1.10 sec, wall time      0.03 sec
+cycle = 2  norm(lambda1,lambda2) = 0.000888384
+    CPU time for CCSD iter      0.81 sec, wall time      0.02 sec
+cycle = 3  norm(lambda1,lambda2) = 0.000301015
+    CPU time for CCSD iter      0.84 sec, wall time      0.02 sec
+cycle = 4  norm(lambda1,lambda2) = 9.06243e-05
+    CPU time for CCSD iter      0.82 sec, wall time      0.02 sec
+cycle = 5  norm(lambda1,lambda2) = 3.55475e-05
+    CPU time for CCSD iter      0.84 sec, wall time      0.02 sec
+cycle = 6  norm(lambda1,lambda2) = 9.70856e-06
+    CPU time for CCSD iter      0.81 sec, wall time      0.02 sec
+cc dipole: [-7.11183230e-16  4.06506247e-15  9.91042659e-01]
+relaxed cc dipoles:
+CCSD(T) energy -56.283974019652526
+CCSD(T) energy -56.28401076614896
+emf_m: -56.14519759851218, emf_p: -56.14517682128519, dip_mf: 1.0388613496559174
+eccsd_m: -56.28218713456267, eccsd_p: -56.282167304394015, dip_ccsd: 0.9915084326905798
+eccsdpt_m: -56.2840022544413, eccsd_p: -56.28398253136019, dip_ccsdpt: 0.9861540554823022

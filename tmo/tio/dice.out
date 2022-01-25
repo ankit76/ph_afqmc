@@ -1,0 +1,124 @@
+
+     ____  _
+    |  _ \(_) ___ ___
+    | | | | |/ __/ _ \
+    | |_| | | (_|  __/
+    |____/|_|\___\___|   v1.0
+
+
+**************************************************************
+Dice  Copyright (C) 2017  Sandeep Sharma
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+See the GNU General Public License for more details.
+
+Author:       Sandeep Sharma
+Contributors: James E Smith, Adam A Holmes, Bastien Mussard
+For detailed documentation on Dice please visit
+https://sanshar.github.io/Dice/
+and our group page for up to date information on other projects
+http://www.colorado.edu/lab/sharmagroup/
+**************************************************************
+
+User:             anma2640
+Date:             Thu Dec 23 15:03:16 2021
+PID:              31336
+
+Path:             /projects/anma2640/newDice/Dice/Dice
+Commit:           b241343d035b33ab6c0de97d713be6c4814aa662
+Branch:           master
+Compilation Date: Jul 15 2021 14:58:41
+
+
+**************************************************************
+INPUT FILE
+**************************************************************
+#system
+nocc 18
+0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 18 
+orbitals ./FCIDUMP_can
+nroots 1
+
+#variational
+schedule
+0	1e-05
+end
+davidsonTol 5e-05
+dE 1e-05
+maxiter 6
+writebestdeterminants 50000
+
+#pt
+nPTiter 10
+epsilon2 1e-07
+#epsilon2Large 2e-5
+targetError 1e-5
+sampleN 200
+
+#misc
+noio
+#prefix /scratch/summit/anma2640/fep
+#DoRDM
+#DoSpinRDM
+
+
+
+**************************************************************
+SELECTING REFERENCE DETERMINANT(S)
+**************************************************************
+2 2 2 2 2   2 2 2 a a   0 0 0 0 0   0 0 0  Given Ref. Energy:        -73.2622480165
+
+
+**************************************************************
+VARIATIONAL STEP  
+**************************************************************
+Iter Root       Eps1   #Var. Det.               Energy   #Davidson     Time(s)
+   0    0    1.00e-05        2117       -73.4884632290         11        0.19
+   1    0    1.00e-05      303309       -73.5102431140         13        4.51
+   2    0    1.00e-05      689978       -73.5119560375         11        9.55
+   3    0    1.00e-05      726104       -73.5119643723          6       11.25
+Performing final tight davidson with tol: 5e-05
+Exiting variational iterations
+
+Variational calculation result
+Root             Energy     Time(s)
+   0      -73.5119643723       11.42
+
+Printing most important determinants
+ Det     weight  Determinant string
+State :   0
+   0       0.9480717155  2 2 2 2 2   2 2 2 a a   0 0 0 0 0   0 0 0 
+   1      -0.0692455405  2 2 2 2 2   2 0 2 a a   0 0 0 0 0   0 2 0 
+   2      -0.0692453094  2 2 2 2 2   2 2 0 a a   0 0 0 0 0   0 0 2 
+   3      -0.0669673545  2 2 2 2 2   0 2 2 a a   0 0 2 0 0   0 0 0 
+   4      -0.0490325782  2 2 2 2 2   0 2 2 a a   0 0 0 2 0   0 0 0 
+   5       0.0490144932  2 2 2 2 2   2 b a a a   0 0 0 0 0   0 a b 
+
+
+**************************************************************
+PERTURBATION THEORY STEP  
+**************************************************************
+Performing (semi)stochastic PT for state:   0
+Deterministic PT calculation converged
+PTEnergy:     -73.5119643723
+Time(s):       49.42
+
+2/ Stochastic calculation with epsilon2=1e-07
+  Iter          EPTcurrent  State             EPTavg      Error     Time(s)
+     1      -73.5119939167      0     -73.5119939167         --       49.85
+     2      -73.5119960860      0     -73.5119950013         --       50.13
+     3      -73.5119959792      0     -73.5119953273         --       50.40
+     4      -73.5119957777      0     -73.5119954399         --       50.67
+     5      -73.5119958397      0     -73.5119955198   4.04e-07       50.94
+Semistochastic PT calculation converged
+PTEnergy:     -73.5119955198 +/- 4.04e-07
+Time(s):       50.94
+
+
+**************************************************************
+Returning without error
+**************************************************************
+
+

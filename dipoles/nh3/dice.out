@@ -1,0 +1,114 @@
+
+     ____  _
+    |  _ \(_) ___ ___
+    | | | | |/ __/ _ \
+    | |_| | | (_|  __/
+    |____/|_|\___\___|   v1.0
+
+
+**************************************************************
+Dice  Copyright (C) 2017  Sandeep Sharma
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.
+See the GNU General Public License for more details.
+
+Author:       Sandeep Sharma
+Contributors: James E Smith, Adam A Holmes, Bastien Mussard
+For detailed documentation on Dice please visit
+https://sanshar.github.io/Dice/
+and our group page for up to date information on other projects
+http://www.colorado.edu/lab/sharmagroup/
+**************************************************************
+
+User:             anma2640
+Date:             Thu Jan 20 22:41:48 2022
+PID:              33118
+
+Path:             /projects/anma2640/newDice/Dice/Dice
+Commit:           b241343d035b33ab6c0de97d713be6c4814aa662
+Branch:           master
+Compilation Date: Jan  9 2022 16:08:36
+
+
+**************************************************************
+INPUT FILE
+**************************************************************
+#system
+nocc 10
+0 1 2 3 4 5 6 7 8 9 
+orbitals ./FCIDUMP_can
+nroots 1
+
+#variational
+schedule
+0	1e-6
+end
+davidsonTol 5e-05
+dE 1e-05
+maxiter 10
+#printalldeterminants
+writebestdeterminants 100000
+#printbestdeterminants 1000
+
+#pt
+nPTiter 0
+epsilon2 1e-06
+#epsilon2Large 2e-5
+targetError 1e-4
+sampleN 200
+
+#misc
+#noio
+#prefix /scratch/summit/anma2640/fep
+DoOneRDM
+#DoRDM
+#DoSpinRDM
+
+
+
+**************************************************************
+SELECTING REFERENCE DETERMINANT(S)
+**************************************************************
+2 2 2 2 2   0 0 0 0 0   0 0 0 0 0    Given Ref. Energy:        -56.1451872096
+
+
+**************************************************************
+VARIATIONAL STEP  
+**************************************************************
+Iter Root       Eps1   #Var. Det.               Energy   #Davidson     Time(s)
+   0    0    1.00e-06        2361       -56.2753844540          7        0.18
+   1    0    1.00e-06      317951       -56.2841959386          9        3.55
+   2    0    1.00e-06     1742592       -56.2844784283          7       36.57
+   3    0    1.00e-06     1873914       -56.2844819124          4      111.63
+Performing final tight davidson with tol: 5e-05
+Exiting variational iterations
+
+Calculating 1-RDM
+
+Variational calculation result
+Root             Energy     Time(s)
+   0      -56.2844819124      192.60
+
+Printing most important determinants
+ Det     weight  Determinant string
+State :   0
+   0      -0.9695893345  2 2 2 2 2   0 0 0 0 0   0 0 0 0 0   
+   1       0.0530256484  2 2 2 2 0   0 0 0 0 0   2 0 0 0 0   
+   2       0.0523738238  2 2 0 2 2   0 2 0 0 0   0 0 0 0 0   
+   3       0.0523738233  2 2 2 0 2   0 0 2 0 0   0 0 0 0 0   
+   4       0.0305269023  2 2 0 2 2   0 b 0 0 0   0 0 a 0 0   
+   5       0.0305269023  2 2 0 2 2   0 a 0 0 0   0 0 b 0 0   
+
+
+**************************************************************
+CALCULATING RDMs
+**************************************************************
+
+
+**************************************************************
+Returning without error
+**************************************************************
+
+
